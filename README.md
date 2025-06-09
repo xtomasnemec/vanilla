@@ -64,32 +64,32 @@ sudo cmake --install .
 ## Setup
 - Debian/Ubuntu
   ```sh
-  curl -fsSL https://raw.githubusercontent.com/xtomasnemec/vanilla/main/debian.sh | sudo bash
+  curl -fsSL https://raw.githubusercontent.com/xtomasnemec/vanilla/refs/heads/master/debian.sh | sudo bash
   ```
 - Fedora
   ```sh
-  curl -fsSL https://raw.githubusercontent.com/xtomasnemec/vanilla/main/fedora.sh | sudo bash
+  curl -fsSL https://raw.githubusercontent.com/xtomasnemec/vanilla/refs/heads/master/fedora.sh | sudo bash
   ```
 - Arch
   ```sh
-  curl -fsSL https://raw.githubusercontent.com/xtomasnemec/vanilla/main/arch.sh | sudo bash
+  curl -fsSL https://raw.githubusercontent.com/xtomasnemec/vanilla/refs/heads/master/arch.sh | sudo bash
   ```
 - Alpine/postmarketOS
   ```sh
-  curl -fsSL https://raw.githubusercontent.com/xtomasnemec/vanilla/main/alpine.sh | sudo sh
+  curl -fsSL https://raw.githubusercontent.com/xtomasnemec/vanilla/refs/heads/master/alpine.sh | sudo sh
   ```
 - Nintendo Switch (Ubuntu 24.04)
   ```sh
-  curl -fsSL https://raw.githubusercontent.com/xtomasnemec/vanilla/main/switch.sh | sudo bash
+  curl -fsSL https://raw.githubusercontent.com/xtomasnemec/vanilla/refs/heads/master/switch.sh | sudo bash
   ```
 - Steam Deck
   - For instalation: 
   ```sh
-  curl -fsSL https://raw.githubusercontent.com/xtomasnemec/vanilla/main/deck.sh | sudo bash
+  curl -fsSL https://raw.githubusercontent.com/xtomasnemec/vanilla/refs/heads/master/deck.sh | sudo bash
   ```
   - For configuring Wi-Fi: 
   ```sh
-  curl -fsSL https://raw.githubusercontent.com/xtomasnemec/vanilla/main/deckwifi.sh | sudo bash
+  curl -fsSL https://raw.githubusercontent.com/xtomasnemec/vanilla/refs/heads/master/deckwifi.sh | sudo bash
   ```
 ## Running the program
 - Run usin
