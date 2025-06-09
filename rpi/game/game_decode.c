@@ -412,134 +412,110 @@ void *vpi_decode_loop(void *)
     int ret = VANILLA_PI_ERR_DECODER;
     int ffmpeg_err;
 
-    // Initialize FFmpeg
-    int using_v4l2m2m = 0;
-	const AVCodec *codec = 0;
-
-    if (using_v4l2m2m) {
-        codec = avcodec_find_decoder_by_name("h264_v4l2m2m");
+    // block nvidia hardware decoder
+    const AVCodec *codec = avcodec_find_decoder(AV_CODEC_ID_H264);
+    if (codec && strcmp(codec->name, "h264_nvv4l2") == 0) {
+        vpilog("Hardware H264 decoder (%s) is not allowed, using software decoder only.\n", codec->name);
+        codec = NULL;
     }
     if (!codec) {
-        codec = avcodec_find_decoder(AV_CODEC_ID_H264);
-        using_v4l2m2m = 0;
+        vpilog("No suitable software H264 decoder was available\n");
+        goto exit;
     }
-	if (!codec) {
-		vpilog("No decoder was available\n");
-		goto exit;
-	}
 
     video_codec_ctx = avcodec_alloc_context3(codec);
-	if (!video_codec_ctx) {
-		vpilog("Failed to allocate codec context\n");
-		goto free_context;
-	}
-
-    if (using_v4l2m2m) {
-        ffmpeg_err = av_hwdevice_ctx_create(&video_codec_ctx->hw_device_ctx, AV_HWDEVICE_TYPE_DRM, "/dev/dri/card0", NULL, 0);
-        if (ffmpeg_err < 0) {
-            vpilog("Failed to create hwdevice context: %s (%i)\n", av_err2str(ffmpeg_err), ffmpeg_err);
-            goto free_context;
-        }
-
-        // MAKE SURE WE GET DRM PRIME FRAMES BY OVERRIDING THE GET_FORMAT FUNCTION
-        video_codec_ctx->get_format = get_format;
+    if (!video_codec_ctx) {
+        vpilog("Failed to allocate codec context\n");
+        goto free_context;
     }
 
-	ffmpeg_err = avcodec_open2(video_codec_ctx, codec, NULL);
+    ffmpeg_err = avcodec_open2(video_codec_ctx, codec, NULL);
     if (ffmpeg_err < 0) {
-		vpilog("Failed to open decoder: %i\n", ffmpeg_err);
+        vpilog("Failed to open decoder: %i\n", ffmpeg_err);
         goto free_context;
-	}
+    }
 
-	decoding_frame = av_frame_alloc();
+    decoding_frame = av_frame_alloc();
     if (!decoding_frame) {
         vpilog("Failed to allocate AVFrame\n");
         goto free_context;
     }
 
-	vpi_present_frame = av_frame_alloc();
-	if (!vpi_present_frame) {
-		vpilog("Failed to allocate AVFrame\n");
-		goto free_decode_frame;
-	}
+    vpi_present_frame = av_frame_alloc();
+    if (!vpi_present_frame) {
+        vpilog("Failed to allocate AVFrame\n");
+        goto free_decode_frame;
+    }
 
-	video_packet = av_packet_alloc();
-	if (!video_packet) {
-		vpilog("Failed to allocate AVPacket\n");
-		goto free_present_frame;
-	}
+    video_packet = av_packet_alloc();
+    if (!video_packet) {
+        vpilog("Failed to allocate AVPacket\n");
+        goto free_present_frame;
+    }
 
-	AVFrame *frame = av_frame_alloc();
+    AVFrame *frame = av_frame_alloc();
 
     pthread_mutex_lock(&vpi_decode_loop_mutex);
-	while (vpi_decode_loop_running) {
-		while (vpi_decode_loop_running && !vpi_decode_ready) {
+    while (vpi_decode_loop_running) {
+        while (vpi_decode_loop_running && !vpi_decode_ready) {
             pthread_cond_wait(&vpi_decode_loop_cond, &vpi_decode_loop_mutex);
-		}
+        }
 
-		if (!vpi_decode_loop_running) {
-			break;
-		}
+        if (!vpi_decode_loop_running) {
+            break;
+        }
 
         // Send packet to decoder
         video_packet->data = vpi_decode_data;
         video_packet->size = vpi_decode_size;
         vpi_decode_ready = 0;
 
-		pthread_mutex_lock(&recording_mutex);
-		if (recording_fmt_ctx) {
-			video_packet->stream_index = VIDEO_STREAM_INDEX;
-	
-			int64_t ts = get_recording_timestamp(recording_vstr->time_base);
-	
-			video_packet->dts = ts;
-			video_packet->pts = ts;
+        pthread_mutex_lock(&recording_mutex);
+        if (recording_fmt_ctx) {
+            video_packet->stream_index = VIDEO_STREAM_INDEX;
 
-			av_interleaved_write_frame(recording_fmt_ctx, video_packet);
-			
-			// av_interleaved_write_frame() eventually calls av_packet_unref(),
-			// so we must put the references back in
-			video_packet->data = vpi_decode_data;
-			video_packet->size = vpi_decode_size;
-		}
-		pthread_mutex_unlock(&recording_mutex);
+            int64_t ts = get_recording_timestamp(recording_vstr->time_base);
+
+            video_packet->dts = ts;
+            video_packet->pts = ts;
+
+            av_interleaved_write_frame(recording_fmt_ctx, video_packet);
+
+            // av_interleaved_write_frame() eventually calls av_packet_unref(),
+            // so we must put the references back in
+            video_packet->data = vpi_decode_data;
+            video_packet->size = vpi_decode_size;
+        }
+        pthread_mutex_unlock(&recording_mutex);
 
         int err = avcodec_send_packet(video_codec_ctx, video_packet);
 
-		pthread_mutex_unlock(&vpi_decode_loop_mutex);
+        pthread_mutex_unlock(&vpi_decode_loop_mutex);
 
         if (err < 0) {
             vpilog("Failed to send packet to decoder: %s (%i)\n", av_err2str(err), err);
-            // return 0;
-
-			vanilla_request_idr();
+            vanilla_request_idr();
         } else {
             decode();
         }
 
-		pthread_mutex_lock(&vpi_decode_loop_mutex);
-	}
-	pthread_mutex_unlock(&vpi_decode_loop_mutex);
+        pthread_mutex_lock(&vpi_decode_loop_mutex);
+    }
+    pthread_mutex_unlock(&vpi_decode_loop_mutex);
 
     ret = VANILLA_SUCCESS;
 
-    // TEMP: Signals to DRM thread
-    // pthread_mutex_lock(&decoding_mutex);
-	// running = 0;
-	// pthread_cond_broadcast(&decoding_wait_cond);
-	// pthread_mutex_unlock(&decoding_mutex);
-
-	av_frame_free(&frame);
+    av_frame_free(&frame);
 
 free_packet:
-	av_packet_free(&video_packet);
+    av_packet_free(&video_packet);
 
 free_present_frame:
-	av_frame_free(&vpi_present_frame);
-	vpi_present_frame = 0;
+    av_frame_free(&vpi_present_frame);
+    vpi_present_frame = 0;
 
 free_decode_frame:
-	av_frame_free(&decoding_frame);
+    av_frame_free(&decoding_frame);
 
 free_context:
     avcodec_free_context(&video_codec_ctx);
