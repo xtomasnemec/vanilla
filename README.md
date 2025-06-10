@@ -93,7 +93,7 @@ sudo cmake --install .
   ```
 ## Running the program
 - Run using
-```sh
+```bash
   cd vanilla
   sudo bash ./run.sh
 ```
