@@ -45,7 +45,7 @@ enum AVPixelFormat get_format(AVCodecContext* ctx, const enum AVPixelFormat *pix
     while (*pix_fmt != AV_PIX_FMT_NONE) {
         if (*pix_fmt == AV_PIX_FMT_DRM_PRIME) {
             return AV_PIX_FMT_DRM_PRIME;
-        	}
+        }
         pix_fmt++;
     }
 
@@ -54,185 +54,185 @@ enum AVPixelFormat get_format(AVCodecContext* ctx, const enum AVPixelFormat *pix
 
 int dump_frame_to_file(const AVFrame *frame, const char *filename)
 {
-	AVFormatContext *ofmt;
-	int ret = avformat_alloc_output_context2(&ofmt, 0, 0, filename);
-	if (ret < 0) {
-		vpilog("Failed to allocate new AVFormatContext for screenshot\n");
-		goto exit;
-	}
-
-	enum AVCodecID codec_id = AV_CODEC_ID_PNG;
-	const AVCodec *codec = avcodec_find_encoder(codec_id);
-	if (!codec) {
-		vpilog("Failed to find encoder for screenshot\n");
-        ret = AVERROR_ENCODER_NOT_FOUND;
-		goto exit_and_free_avformatcontext;
-	}
-
-	AVStream *s = avformat_new_stream(ofmt, 0);
-	if (!s) {
-		vpilog("Failed to create new AVStream for screenshot\n");
-        ret = AVERROR(ENOMEM);
-		goto exit_and_free_avformatcontext;
-	}
-
-	s->id = 0;
-
-	AVCodecContext *ocodec_ctx = avcodec_alloc_context3(codec);
-	if (!ocodec_ctx) {
-		vpilog("Failed to create new AVCodecContext for screenshot\n");
-        ret = AVERROR(ENOMEM);
-		goto exit_and_free_avformatcontext;
-	}
-
-	enum AVPixelFormat opix_fmt = AV_PIX_FMT_RGB24;
-
-	ocodec_ctx->width = frame->width;
-	ocodec_ctx->height = frame->height;
-	ocodec_ctx->pix_fmt = opix_fmt;
-	ocodec_ctx->codec_id = codec_id;
-	ocodec_ctx->time_base = (AVRational){1, 1};
-	ocodec_ctx->frame_num = 1;
-
-	if (ofmt->flags & AVFMT_GLOBALHEADER) {
-		ocodec_ctx->flags |= AV_CODEC_FLAG_GLOBAL_HEADER;
-	}
-
-	AVPacket *opkt = av_packet_alloc();
-	if (!opkt) {
-		vpilog("Failed to create new AVPacket for screenshot\n");
-        ret = AVERROR(ENOMEM);
-		goto exit_and_free_avcodeccontext;
-	}
-
-	ret = avcodec_open2(ocodec_ctx, codec, 0);
-	if (ret < 0) {
-		vpilog("Failed to open encoder for screenshot\n");
-		goto exit_and_free_avpacket;
-	}
-
-	ret = avcodec_parameters_from_context(s->codecpar, ocodec_ctx);
-	if (ret < 0) {
-		vpilog("Failed to copy params from context for screenshot\n");
-		goto exit_and_free_avpacket;
-	}
-
-	ret = avformat_write_header(ofmt, 0);
-	if (ret < 0) {
-		vpilog("Failed to write header for screenshot\n");
-		goto exit_and_free_avpacket;
-	}
-
-	struct SwsContext *osws_ctx = sws_getContext(
-		frame->width, frame->height, frame->format,
-		frame->width, frame->height, opix_fmt,
-		0, 0, 0, 0);
-	if (!osws_ctx) {
-		vpilog("Failed to get SwsContext for screenshot\n");
-        ret = AVERROR(EINVAL);
-		goto exit_and_free_avpacket;
-	}
-
-	AVFrame *oframe = av_frame_alloc();
-	if (!oframe) {
-		vpilog("Failed to allocate AVFrame for screenshot\n");
-        ret = AVERROR(ENOMEM);
-		goto exit_and_free_swscontext;
-	}
-
-	oframe->width = frame->width;
-	oframe->height = frame->height;
-	oframe->format = opix_fmt;
-
-	ret = av_frame_get_buffer(oframe, 0);
-	if (ret < 0) {
-		vpilog("Failed to get AVFrame buffer for screenshot\n");
-		goto exit_and_free_frame;
-	}
-
-	ret = sws_scale(osws_ctx, (const uint8_t **) frame->data, (const int *) frame->linesize, 0, frame->height, oframe->data, oframe->linesize);
-	if (ret < 0) {
-		vpilog("Failed to do swscale for screenshot\n");
-		goto exit_and_free_frame;
-	}
-
-	ret = avcodec_send_frame(ocodec_ctx, oframe);
-	if (ret < 0) {
-		vpilog("Failed to send frame to encoder for screenshot\n");
-		goto exit_and_free_frame;
-	}
-
-	ret = avcodec_receive_packet(ocodec_ctx, opkt);
-	if (ret < 0) {
-		vpilog("Failed to receive packet from encoder for screenshot\n");
-		goto exit_and_free_frame;
-	}
-
-	ret = av_write_frame(ofmt, opkt);
-	if (ret < 0) {
-		vpilog("Failed to write frame for screenshot\n");
-		goto exit_and_free_frame;
-	}
-
-	ret = av_write_trailer(ofmt);
-	if (ret < 0) {
-		vpilog("Failed to write trailer for screenshot\n");
-		goto exit_and_free_frame;
-	}
-
-exit_and_free_frame:
-	av_frame_free(&oframe);
-
-exit_and_free_swscontext:
-	sws_freeContext(osws_ctx);
-
-exit_and_free_avpacket:
-	av_packet_free(&opkt);
-
-exit_and_free_avcodeccontext:
-	avcodec_free_context(&ocodec_ctx);
-
-exit_and_free_avformatcontext:
-	avformat_free_context(ofmt);
-
-exit:
-	if (ret >= 0) {
-		vpilog("Saved screenshot to \"%s\"\n", filename);
-
-		char buf[VPI_TOAST_MAX_LEN];
-		snprintf(buf, sizeof(buf), lang(VPI_LANG_SCREENSHOT_SUCCESS), filename);
-		vpi_show_toast(buf);
-	} else {
-        char buf[VPI_TOAST_MAX_LEN];
-		snprintf(buf, sizeof(buf), lang(VPI_LANG_SCREENSHOT_ERROR), ret);
-		vpi_show_toast(buf);
+    AVFormatContext *ofmt;
+    int ret = avformat_alloc_output_context2(&ofmt, 0, 0, filename);
+    if (ret < 0) {
+        vpilog("Failed to allocate new AVFormatContext for screenshot\n");
+        goto exit;
     }
 
-	return ret;
+    enum AVCodecID codec_id = AV_CODEC_ID_PNG;
+    const AVCodec *codec = avcodec_find_encoder(codec_id);
+    if (!codec) {
+        vpilog("Failed to find encoder for screenshot\n");
+        ret = AVERROR_ENCODER_NOT_FOUND;
+        goto exit_and_free_avformatcontext;
+    }
+
+    AVStream *s = avformat_new_stream(ofmt, 0);
+    if (!s) {
+        vpilog("Failed to create new AVStream for screenshot\n");
+        ret = AVERROR(ENOMEM);
+        goto exit_and_free_avformatcontext;
+    }
+
+    s->id = 0;
+
+    AVCodecContext *ocodec_ctx = avcodec_alloc_context3(codec);
+    if (!ocodec_ctx) {
+        vpilog("Failed to create new AVCodecContext for screenshot\n");
+        ret = AVERROR(ENOMEM);
+        goto exit_and_free_avformatcontext;
+    }
+
+    enum AVPixelFormat opix_fmt = AV_PIX_FMT_RGB24;
+
+    ocodec_ctx->width = frame->width;
+    ocodec_ctx->height = frame->height;
+    ocodec_ctx->pix_fmt = opix_fmt;
+    ocodec_ctx->codec_id = codec_id;
+    ocodec_ctx->time_base = (AVRational){1, 1};
+    ocodec_ctx->frame_num = 1;
+
+    if (ofmt->flags & AVFMT_GLOBALHEADER) {
+        ocodec_ctx->flags |= AV_CODEC_FLAG_GLOBAL_HEADER;
+    }
+
+    AVPacket *opkt = av_packet_alloc();
+    if (!opkt) {
+        vpilog("Failed to create new AVPacket for screenshot\n");
+        ret = AVERROR(ENOMEM);
+        goto exit_and_free_avcodeccontext;
+    }
+
+    ret = avcodec_open2(ocodec_ctx, codec, 0);
+    if (ret < 0) {
+        vpilog("Failed to open encoder for screenshot\n");
+        goto exit_and_free_avpacket;
+    }
+
+    ret = avcodec_parameters_from_context(s->codecpar, ocodec_ctx);
+    if (ret < 0) {
+        vpilog("Failed to copy params from context for screenshot\n");
+        goto exit_and_free_avpacket;
+    }
+
+    ret = avformat_write_header(ofmt, 0);
+    if (ret < 0) {
+        vpilog("Failed to write header for screenshot\n");
+        goto exit_and_free_avpacket;
+    }
+
+    struct SwsContext *osws_ctx = sws_getContext(
+        frame->width, frame->height, frame->format,
+        frame->width, frame->height, opix_fmt,
+        0, 0, 0, 0);
+    if (!osws_ctx) {
+        vpilog("Failed to get SwsContext for screenshot\n");
+        ret = AVERROR(EINVAL);
+        goto exit_and_free_avpacket;
+    }
+
+    AVFrame *oframe = av_frame_alloc();
+    if (!oframe) {
+        vpilog("Failed to allocate AVFrame for screenshot\n");
+        ret = AVERROR(ENOMEM);
+        goto exit_and_free_swscontext;
+    }
+
+    oframe->width = frame->width;
+    oframe->height = frame->height;
+    oframe->format = opix_fmt;
+
+    ret = av_frame_get_buffer(oframe, 0);
+    if (ret < 0) {
+        vpilog("Failed to get AVFrame buffer for screenshot\n");
+        goto exit_and_free_frame;
+    }
+
+    ret = sws_scale(osws_ctx, (const uint8_t **) frame->data, (const int *) frame->linesize, 0, frame->height, oframe->data, oframe->linesize);
+    if (ret < 0) {
+        vpilog("Failed to do swscale for screenshot\n");
+        goto exit_and_free_frame;
+    }
+
+    ret = avcodec_send_frame(ocodec_ctx, oframe);
+    if (ret < 0) {
+        vpilog("Failed to send frame to encoder for screenshot\n");
+        goto exit_and_free_frame;
+    }
+
+    ret = avcodec_receive_packet(ocodec_ctx, opkt);
+    if (ret < 0) {
+        vpilog("Failed to receive packet from encoder for screenshot\n");
+        goto exit_and_free_frame;
+    }
+
+    ret = av_write_frame(ofmt, opkt);
+    if (ret < 0) {
+        vpilog("Failed to write frame for screenshot\n");
+        goto exit_and_free_frame;
+    }
+
+    ret = av_write_trailer(ofmt);
+    if (ret < 0) {
+        vpilog("Failed to write trailer for screenshot\n");
+        goto exit_and_free_frame;
+    }
+
+exit_and_free_frame:
+    av_frame_free(&oframe);
+
+exit_and_free_swscontext:
+    sws_freeContext(osws_ctx);
+
+exit_and_free_avpacket:
+    av_packet_free(&opkt);
+
+exit_and_free_avcodeccontext:
+    avcodec_free_context(&ocodec_ctx);
+
+exit_and_free_avformatcontext:
+    avformat_free_context(ofmt);
+
+exit:
+    if (ret >= 0) {
+        vpilog("Saved screenshot to \"%s\"\n", filename);
+
+        char buf[VPI_TOAST_MAX_LEN];
+        snprintf(buf, sizeof(buf), lang(VPI_LANG_SCREENSHOT_SUCCESS), filename);
+        vpi_show_toast(buf);
+    } else {
+        char buf[VPI_TOAST_MAX_LEN];
+        snprintf(buf, sizeof(buf), lang(VPI_LANG_SCREENSHOT_ERROR), ret);
+        vpi_show_toast(buf);
+    }
+
+    return ret;
 }
 
 int64_t get_recording_timestamp(AVRational timebase)
 {
-	struct timeval tv;
-	gettimeofday(&tv, 0);
+    struct timeval tv;
+    gettimeofday(&tv, 0);
 
-	int64_t us = (tv.tv_sec - recording_start.tv_sec) * 1000000 + (tv.tv_usec - recording_start.tv_usec);
+    int64_t us = (tv.tv_sec - recording_start.tv_sec) * 1000000 + (tv.tv_usec - recording_start.tv_usec);
     return av_rescale_q(us, (AVRational) {1, 1000000}, timebase);
 }
 
 void vpi_decode_send_audio(const void *data, size_t size)
 {
-	pthread_mutex_lock(&recording_mutex);
+    pthread_mutex_lock(&recording_mutex);
 
-	if (recording_fmt_ctx) {
+    if (recording_fmt_ctx) {
         int ret;
 
-		AVPacket *pkt = av_packet_alloc();
+        AVPacket *pkt = av_packet_alloc();
 
-		pkt->data = (uint8_t *) data;
-		pkt->size = size;
+        pkt->data = (uint8_t *) data;
+        pkt->size = size;
 
-		int64_t ts = get_recording_timestamp(recording_astr->time_base);
+        int64_t ts = get_recording_timestamp(recording_astr->time_base);
         pkt->stream_index = AUDIO_STREAM_INDEX;
         pkt->dts = ts;
         pkt->pts = ts;
@@ -242,31 +242,31 @@ void vpi_decode_send_audio(const void *data, size_t size)
         av_packet_free(&pkt);
     }
 
-	pthread_mutex_unlock(&recording_mutex);
+    pthread_mutex_unlock(&recording_mutex);
 }
 
 int vpi_decode_is_recording()
 {
-	int i;
-	pthread_mutex_lock(&recording_mutex);
-	i = (recording_fmt_ctx != 0);
-	pthread_mutex_unlock(&recording_mutex);
-	return i;
+    int i;
+    pthread_mutex_lock(&recording_mutex);
+    i = (recording_fmt_ctx != 0);
+    pthread_mutex_unlock(&recording_mutex);
+    return i;
 }
 
 int vpi_decode_record(const char *filename)
 {
-	pthread_mutex_lock(&recording_mutex);
+    pthread_mutex_lock(&recording_mutex);
 
     int r = avformat_alloc_output_context2(&recording_fmt_ctx, 0, 0, filename);
     if (r < 0) {
-		vpilog("Failed to allocate output context for recording\n");
+        vpilog("Failed to allocate output context for recording\n");
         goto exit;
     }
 
-	recording_vstr = avformat_new_stream(recording_fmt_ctx, 0);
+    recording_vstr = avformat_new_stream(recording_fmt_ctx, 0);
     if (!recording_vstr) {
-		vpilog("Failed to allocate video stream for recording\n");
+        vpilog("Failed to allocate video stream for recording\n");
         goto exit_and_free_context;
     }
 
@@ -278,12 +278,12 @@ int vpi_decode_record(const char *filename)
     recording_vstr->time_base = (AVRational) {1, 60};
     recording_vstr->codecpar->codec_id = AV_CODEC_ID_H264;
 
-	recording_vstr->codecpar->extradata = av_malloc(200);
-	recording_vstr->codecpar->extradata_size = vanilla_generate_h264_header(recording_vstr->codecpar->extradata, 200);
+    recording_vstr->codecpar->extradata = av_malloc(200);
+    recording_vstr->codecpar->extradata_size = vanilla_generate_h264_header(recording_vstr->codecpar->extradata, 200);
 
     recording_astr = avformat_new_stream(recording_fmt_ctx, 0);
     if (!recording_astr) {
-		vpilog("Failed to allocate audio stream for recording\n");
+        vpilog("Failed to allocate audio stream for recording\n");
         goto exit_and_free_context;
     }
 
@@ -299,26 +299,26 @@ int vpi_decode_record(const char *filename)
     recording_astr->time_base = (AVRational) {1, 48000};
     recording_astr->codecpar->codec_id = AV_CODEC_ID_PCM_S16LE;
 
-	r = avio_open2(&recording_fmt_ctx->pb, filename, AVIO_FLAG_WRITE, 0, 0);
+    r = avio_open2(&recording_fmt_ctx->pb, filename, AVIO_FLAG_WRITE, 0, 0);
     if (r < 0) {
-		vpilog("Failed to open AVIO for recording\n");
+        vpilog("Failed to open AVIO for recording\n");
         goto exit_and_free_context;
     }
 
     r = avformat_write_header(recording_fmt_ctx, 0);
     if (r < 0) {
-		vpilog("Failed to write header for recording\n");
+        vpilog("Failed to write header for recording\n");
         goto exit_and_free_context;
     }
 
-	vanilla_request_idr();
+    vanilla_request_idr();
 
-	gettimeofday(&recording_start, 0);
-	
-	char buf[VPI_TOAST_MAX_LEN];
-	snprintf(buf, sizeof(buf), lang(VPI_LANG_RECORDING_START), filename);
-	vpi_show_toast(buf);
-	vpilog("Started recording to \"%s\"\n", filename);
+    gettimeofday(&recording_start, 0);
+    
+    char buf[VPI_TOAST_MAX_LEN];
+    snprintf(buf, sizeof(buf), lang(VPI_LANG_RECORDING_START), filename);
+    vpi_show_toast(buf);
+    vpilog("Started recording to \"%s\"\n", filename);
 
     goto exit;
 
@@ -327,169 +327,125 @@ exit_and_free_context:
     recording_fmt_ctx = 0;
 
 exit:
-	pthread_mutex_unlock(&recording_mutex);
+    pthread_mutex_unlock(&recording_mutex);
 
-	return r;
+    return r;
 }
 
 void vpi_decode_record_stop()
 {
-	pthread_mutex_lock(&recording_mutex);
+    pthread_mutex_lock(&recording_mutex);
 
-	if (recording_fmt_ctx) {
+    if (recording_fmt_ctx) {
         int r = av_write_trailer(recording_fmt_ctx);
-		if (r < 0) {
-			vpilog("Failed to write trailer for recording\n");
-		}
+        if (r < 0) {
+            vpilog("Failed to write trailer for recording\n");
+        }
 
         avio_closep(&recording_fmt_ctx->pb);
 
         avformat_free_context(recording_fmt_ctx);
         recording_fmt_ctx = 0;
 
-		vpilog("Finished recording\n");
-		vpi_show_toast(lang(VPI_LANG_RECORDING_FINISH));
+        vpilog("Finished recording\n");
+        vpi_show_toast(lang(VPI_LANG_RECORDING_FINISH));
     }
 
-	pthread_mutex_unlock(&recording_mutex);
-}
-
-static int handle_decoder_error(int err) {
-    switch (err) {
-        case AVERROR_INVALIDDATA:
-            vpilog("Decoder received invalid data, requesting IDR frame\n");
-            vanilla_request_idr();
-            return 1; // Recoverable error
-            
-        case AVERROR(EAGAIN):
-            // Normal condition, decoder needs more data
-            return 0;
-            
-        case AVERROR_EOF:
-            vpilog("Decoder reached end of stream\n");
-            return -1;
-            
-        default:
-            vpilog("Critical decoder error: %s (%d)\n", av_err2str(err), err);
-            return -1;
-    }
+    pthread_mutex_unlock(&recording_mutex);
 }
 
 int decode()
 {
-	int err;
-	int ret = 1;
+    int err;
 
-	// Retrieve frame from decoder
-	while (1) {
-		err = avcodec_receive_frame(video_codec_ctx, decoding_frame);
-		if (err == AVERROR(EAGAIN)) {
-			// Decoder wants another packet before it can output a frame. Silently exit.
-			break;
-		} else if (err < 0) {
-			if (handle_decoder_error(err) <= 0) {
-                ret = 0;
+    int ret = 1;
+
+    // Retrieve frame from decoder
+    while (1) {
+        err = avcodec_receive_frame(video_codec_ctx, decoding_frame);
+        if (err == AVERROR(EAGAIN)) {
+            // Decoder wants another packet before it can output a frame. Silently exit.
+            break;
+        } else if (err < 0) {
+            vpilog("Failed to receive frame from decoder: %i\n", err);
+            ret = 0;
+            break;
+        } else if (!decoding_frame->data[0]) {
+            vpilog("WE GOT A NULL DATA[0] STRAIGHT FROM THE DECODER?????\n");
+            abort();
+        } else if ((decoding_frame->flags & AV_FRAME_FLAG_CORRUPT) != 0) {
+            vpilog("GOT A CORRUPT FRAME??????\n");
+            abort();
+        } else {
+            pthread_mutex_lock(&vpi_decoding_mutex);
+
+            // Swap refs from decoding_frame to present_frame
+            av_frame_unref(vpi_present_frame);
+            av_frame_move_ref(vpi_present_frame, decoding_frame);
+
+            pthread_mutex_lock(&screenshot_mutex);
+            if (screenshot_buf[0] != 0) {
+                // Dump this frame into file
+                dump_frame_to_file(vpi_present_frame, screenshot_buf);
+                screenshot_buf[0] = 0;
             }
-			break;
-		} 
-        
-        // Validate the decoded frame
-        if (!decoding_frame->data[0] || (decoding_frame->flags & AV_FRAME_FLAG_CORRUPT)) {
-            vpilog("Received corrupt frame, discarding\n");
-            av_frame_unref(decoding_frame);
-            continue;
+            pthread_mutex_unlock(&screenshot_mutex);
+            
+            pthread_cond_broadcast(&decoding_wait_cond);
+            pthread_mutex_unlock(&vpi_decoding_mutex);
         }
+    }
 
-		pthread_mutex_lock(&vpi_decoding_mutex);
-
-		// Swap refs from decoding_frame to present_frame
-		av_frame_unref(vpi_present_frame);
-		av_frame_move_ref(vpi_present_frame, decoding_frame);
-
-		pthread_mutex_lock(&screenshot_mutex);
-		if (screenshot_buf[0] != 0) {
-			// Dump this frame into file
-			dump_frame_to_file(vpi_present_frame, screenshot_buf);
-			screenshot_buf[0] = 0;
-		}
-		pthread_mutex_unlock(&screenshot_mutex);
-		
-		pthread_cond_broadcast(&decoding_wait_cond);
-		pthread_mutex_unlock(&vpi_decoding_mutex);
-	}
-
-	return ret;
+    return ret;
 }
 
 void vpi_decode_screenshot(const char *filename)
 {
-	// Grab copy of filename
-	pthread_mutex_lock(&screenshot_mutex);
-	vui_strncpy(screenshot_buf, filename, sizeof(screenshot_buf));
-	pthread_mutex_unlock(&screenshot_mutex);
+    // Grab copy of filename
+    pthread_mutex_lock(&screenshot_mutex);
+    vui_strncpy(screenshot_buf, filename, sizeof(screenshot_buf));
+    pthread_mutex_unlock(&screenshot_mutex);
 }
 
 void *vpi_decode_loop(void *)
 {
     int ret = VANILLA_PI_ERR_DECODER;
     int ffmpeg_err;
-    const AVCodec *codec = NULL;
 
-    // Try hardware decoder first
-    codec = avcodec_find_decoder_by_name("h264_nvv4l2");
+    // Initialize FFmpeg
+    const AVCodec *codec = 0;
+
+    // Explicitly find the software H.264 decoder
+    codec = avcodec_find_decoder(AV_CODEC_ID_H264);
     if (!codec) {
-        vpilog("h264_nvv4l2 decoder not available, trying software decoder\n");
-        codec = avcodec_find_decoder(AV_CODEC_ID_H264);
-        if (!codec) {
-            vpilog("No H264 decoder available\n");
-            goto exit;
-        }
+        vpilog("No H264 software decoder available\n");
+        goto exit;
     }
 
     video_codec_ctx = avcodec_alloc_context3(codec);
     if (!video_codec_ctx) {
         vpilog("Failed to allocate codec context\n");
-        goto exit;
+        goto free_context;
     }
 
-    // Configure decoder based on type
-    if (codec && strcmp(codec->name, "h264_nvv4l2") == 0) {
-        vpilog("Using NVIDIA hardware decoder (h264_nvv4l2)\n");
-        
-        // Set hardware-specific options
-        video_codec_ctx->get_format = get_format;
-        video_codec_ctx->pix_fmt = AV_PIX_FMT_DRM_PRIME;
-        
-        AVDictionary *opts = NULL;
-        av_dict_set(&opts, "num_capture_buffers", "4", 0);
-        av_dict_set(&opts, "output_format", "drm_prime", 0);
-        av_dict_set(&opts, "display_delay", "0", 0);
-        av_dict_set(&opts, "preset", "fast", 0);
-        
-        ffmpeg_err = avcodec_open2(video_codec_ctx, codec, &opts);
-        av_dict_free(&opts);
-    } else {
-        vpilog("Using software H264 decoder\n");
-        ffmpeg_err = avcodec_open2(video_codec_ctx, codec, NULL);
-    }
+    // No hardware-specific configuration needed for software decoder
+    // The get_format function and hwdevice_ctx_create calls are removed.
 
+    ffmpeg_err = avcodec_open2(video_codec_ctx, codec, NULL);
     if (ffmpeg_err < 0) {
-        vpilog("Failed to open decoder %s: %s (%i)\n", 
-              codec ? codec->name : "NULL", 
-              av_err2str(ffmpeg_err), 
-              ffmpeg_err);
+        vpilog("Failed to open software decoder: %i\n", ffmpeg_err);
         goto free_context;
     }
 
     decoding_frame = av_frame_alloc();
     if (!decoding_frame) {
-        vpilog("Failed to allocate decoding AVFrame\n");
+        vpilog("Failed to allocate AVFrame\n");
         goto free_context;
     }
 
     vpi_present_frame = av_frame_alloc();
     if (!vpi_present_frame) {
-        vpilog("Failed to allocate present AVFrame\n");
+        vpilog("Failed to allocate AVFrame\n");
         goto free_decode_frame;
     }
 
@@ -498,6 +454,8 @@ void *vpi_decode_loop(void *)
         vpilog("Failed to allocate AVPacket\n");
         goto free_present_frame;
     }
+
+    AVFrame *frame = av_frame_alloc();
 
     pthread_mutex_lock(&vpi_decode_loop_mutex);
     while (vpi_decode_loop_running) {
@@ -509,32 +467,17 @@ void *vpi_decode_loop(void *)
             break;
         }
 
-        // Make sure we have valid data
-        if (vpi_decode_size < 4 || vpi_decode_data == NULL) { // Minimum H.264 NALU size
-            vpilog("Invalid input data (size: %zu)\n", vpi_decode_size);
-            vpi_decode_ready = 0;
-            continue;
-        }
-
-        // Check for valid NALU start code (0x00000001 or 0x000001)
-        if (!(vpi_decode_data[0] == 0 && vpi_decode_data[1] == 0 && 
-              (vpi_decode_data[2] == 1 || (vpi_decode_data[2] == 0 && vpi_decode_data[3] == 1)))) {
-            vpilog("Invalid NALU start code, requesting IDR\n");
-            vanilla_request_idr();
-            vpi_decode_ready = 0;
-            continue;
-        }
-
-        // Prepare packet
+        // Send packet to decoder
         video_packet->data = vpi_decode_data;
         video_packet->size = vpi_decode_size;
         vpi_decode_ready = 0;
 
-        // Handle recording if active
         pthread_mutex_lock(&recording_mutex);
         if (recording_fmt_ctx) {
             video_packet->stream_index = VIDEO_STREAM_INDEX;
+    
             int64_t ts = get_recording_timestamp(recording_vstr->time_base);
+    
             video_packet->dts = ts;
             video_packet->pts = ts;
 
@@ -542,29 +485,25 @@ void *vpi_decode_loop(void *)
             if (write_err < 0) {
                 vpilog("Failed to write frame to recording: %s\n", av_err2str(write_err));
             }
-
-            // Restore packet data after write
+            
+            // av_interleaved_write_frame() eventually calls av_packet_unref(),
+            // so we must put the references back in
             video_packet->data = vpi_decode_data;
             video_packet->size = vpi_decode_size;
         }
         pthread_mutex_unlock(&recording_mutex);
 
-        // Send to decoder
         int err = avcodec_send_packet(video_codec_ctx, video_packet);
+
         pthread_mutex_unlock(&vpi_decode_loop_mutex);
 
         if (err < 0) {
-            if (!handle_decoder_error(err)) {
-                // Non-recoverable error
-                vpi_decode_loop_running = 0;
-                ret = VANILLA_PI_ERR_DECODER;
-                break;
-            }
+            vpilog("Failed to send packet to decoder: %s (%i)\n", av_err2str(err), err);
+            // return 0;
+
+            vanilla_request_idr();
         } else {
-            // Try to decode frame
-            if (!decode()) {
-                vpilog("Frame decoding failed\n");
-            }
+            decode();
         }
 
         pthread_mutex_lock(&vpi_decode_loop_mutex);
@@ -572,6 +511,8 @@ void *vpi_decode_loop(void *)
     pthread_mutex_unlock(&vpi_decode_loop_mutex);
 
     ret = VANILLA_SUCCESS;
+
+    av_frame_free(&frame);
 
 free_packet:
     av_packet_free(&video_packet);
