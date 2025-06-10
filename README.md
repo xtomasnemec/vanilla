@@ -95,5 +95,5 @@ sudo cmake --install .
 - Run using
 ```sh
   cd vanilla
-  ./run.sh
+  sudo ~/run.sh
 ```

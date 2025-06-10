@@ -411,13 +411,15 @@ void *vpi_decode_loop(void *)
 {
     int ret = VANILLA_PI_ERR_DECODER;
     int ffmpeg_err;
+    const AVCodec *codec = NULL;
 
-    // Try hardware decoder first, then fall back to software
-    const AVCodec *codec = avcodec_find_decoder_by_name("h264_nvv4l2");
+    // Try hardware decoder first
+    codec = avcodec_find_decoder_by_name("h264_nvv4l2");
     if (!codec) {
+        vpilog("h264_nvv4l2 decoder not available, trying software decoder\n");
         codec = avcodec_find_decoder(AV_CODEC_ID_H264);
         if (!codec) {
-            vpilog("No H264 decoder was available\n");
+            vpilog("No H264 decoder available\n");
             goto exit;
         }
     }
@@ -425,34 +427,47 @@ void *vpi_decode_loop(void *)
     video_codec_ctx = avcodec_alloc_context3(codec);
     if (!video_codec_ctx) {
         vpilog("Failed to allocate codec context\n");
-        goto free_context;
+        goto exit;
     }
 
-    // Set hardware decoder options if using nvv4l2
-    if (strcmp(codec->name, "h264_nvv4l2") == 0) {
+    // Configure decoder based on type
+    if (codec && strcmp(codec->name, "h264_nvv4l2") == 0) {
+        vpilog("Using NVIDIA hardware decoder (h264_nvv4l2)\n");
+        
+        // Set hardware-specific options
         video_codec_ctx->get_format = get_format;
-        av_opt_set_int(video_codec_ctx, "num_capture_buffers", 4, 0);
-        av_opt_set_int(video_codec_ctx, "output_format", AV_PIX_FMT_DRM_PRIME, 0);
-        av_opt_set_int(video_codec_ctx, "display_delay", 0, 0);
+        video_codec_ctx->pix_fmt = AV_PIX_FMT_DRM_PRIME;
+        
+        AVDictionary *opts = NULL;
+        av_dict_set(&opts, "num_capture_buffers", "4", 0);
+        av_dict_set(&opts, "output_format", "drm_prime", 0);
+        av_dict_set(&opts, "display_delay", "0", 0);
+        av_dict_set(&opts, "preset", "fast", 0);
+        
+        ffmpeg_err = avcodec_open2(video_codec_ctx, codec, &opts);
+        av_dict_free(&opts);
+    } else {
+        vpilog("Using software H264 decoder\n");
+        ffmpeg_err = avcodec_open2(video_codec_ctx, codec, NULL);
     }
 
-    ffmpeg_err = avcodec_open2(video_codec_ctx, codec, NULL);
     if (ffmpeg_err < 0) {
-        vpilog("Failed to open decoder %s: %i\n", codec->name, ffmpeg_err);
+        vpilog("Failed to open decoder %s: %s (%i)\n", 
+              codec ? codec->name : "NULL", 
+              av_err2str(ffmpeg_err), 
+              ffmpeg_err);
         goto free_context;
     }
-
-    vpilog("Using decoder: %s\n", codec->name);
 
     decoding_frame = av_frame_alloc();
     if (!decoding_frame) {
-        vpilog("Failed to allocate AVFrame\n");
+        vpilog("Failed to allocate decoding AVFrame\n");
         goto free_context;
     }
 
     vpi_present_frame = av_frame_alloc();
     if (!vpi_present_frame) {
-        vpilog("Failed to allocate AVFrame\n");
+        vpilog("Failed to allocate present AVFrame\n");
         goto free_decode_frame;
     }
 
@@ -472,38 +487,49 @@ void *vpi_decode_loop(void *)
             break;
         }
 
-        // Send packet to decoder
+        // Make sure we have valid data
+        if (vpi_decode_size == 0 || vpi_decode_data == NULL) {
+            vpilog("Invalid decode data received\n");
+            vpi_decode_ready = 0;
+            continue;
+        }
+
+        // Prepare packet
         video_packet->data = vpi_decode_data;
         video_packet->size = vpi_decode_size;
         vpi_decode_ready = 0;
 
+        // Handle recording if active
         pthread_mutex_lock(&recording_mutex);
         if (recording_fmt_ctx) {
             video_packet->stream_index = VIDEO_STREAM_INDEX;
-
             int64_t ts = get_recording_timestamp(recording_vstr->time_base);
-
             video_packet->dts = ts;
             video_packet->pts = ts;
 
-            av_interleaved_write_frame(recording_fmt_ctx, video_packet);
+            int write_err = av_interleaved_write_frame(recording_fmt_ctx, video_packet);
+            if (write_err < 0) {
+                vpilog("Failed to write frame to recording: %s\n", av_err2str(write_err));
+            }
 
-            // av_interleaved_write_frame() eventually calls av_packet_unref(),
-            // so we must put the references back in
+            // Restore packet data after write
             video_packet->data = vpi_decode_data;
             video_packet->size = vpi_decode_size;
         }
         pthread_mutex_unlock(&recording_mutex);
 
+        // Send to decoder
         int err = avcodec_send_packet(video_codec_ctx, video_packet);
-
         pthread_mutex_unlock(&vpi_decode_loop_mutex);
 
         if (err < 0) {
-            vpilog("Failed to send packet to decoder: %s (%i)\n", av_err2str(err), err);
+            vpilog("Decoder error (%s), requesting IDR frame\n", av_err2str(err));
             vanilla_request_idr();
         } else {
-            decode();
+            // Try to decode frame
+            if (!decode()) {
+                vpilog("Frame decoding failed\n");
+            }
         }
 
         pthread_mutex_lock(&vpi_decode_loop_mutex);
