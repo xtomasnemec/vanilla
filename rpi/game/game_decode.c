@@ -413,62 +413,61 @@ void *vpi_decode_loop(void *)
     int ffmpeg_err;
 
     // Initialize FFmpeg
-    int using_v4l2m2m = 0;
-	const AVCodec *codec = 0;
+    const AVCodec *codec = NULL;
+    void *i = NULL;
 
-    if (using_v4l2m2m) {
-        codec = avcodec_find_decoder_by_name("h264_v4l2m2m");
+    // Iterate through all H.264 decoders and pick the first software one
+    while ((codec = av_codec_iterate(&i))) {
+        if (avcodec_is_decoder(codec) && codec->id == AV_CODEC_ID_H264) {
+            // Check if it's NOT a hardware accelerated decoder
+            if (!(codec->capabilities & AV_CODEC_CAP_HARDWARE)) {
+                vpilog("Selected software H.264 decoder: %s (%s)\n", codec->name, codec->long_name);
+                break; // Found a software decoder, break the loop
+            } else {
+                vpilog("Skipping hardware H.264 decoder: %s (%s)\n", codec->name, codec->long_name);
+            }
+        }
+        codec = NULL; // Reset codec for next iteration if a hardware one was found and skipped
     }
+
+
     if (!codec) {
-        codec = avcodec_find_decoder(AV_CODEC_ID_H264);
-        using_v4l2m2m = 0;
+        vpilog("No suitable software H.264 decoder available. This is a critical error.\n");
+        goto exit;
     }
-	if (!codec) {
-		vpilog("No decoder was available\n");
-		goto exit;
-	}
 
     video_codec_ctx = avcodec_alloc_context3(codec);
-	if (!video_codec_ctx) {
-		vpilog("Failed to allocate codec context\n");
-		goto free_context;
-	}
-
-    if (using_v4l2m2m) {
-        ffmpeg_err = av_hwdevice_ctx_create(&video_codec_ctx->hw_device_ctx, AV_HWDEVICE_TYPE_DRM, "/dev/dri/card0", NULL, 0);
-        if (ffmpeg_err < 0) {
-            vpilog("Failed to create hwdevice context: %s (%i)\n", av_err2str(ffmpeg_err), ffmpeg_err);
-            goto free_context;
-        }
-
-        // MAKE SURE WE GET DRM PRIME FRAMES BY OVERRIDING THE GET_FORMAT FUNCTION
-        video_codec_ctx->get_format = get_format;
+    if (!video_codec_ctx) {
+        vpilog("Failed to allocate codec context\n");
+        goto free_context;
     }
 
-	ffmpeg_err = avcodec_open2(video_codec_ctx, codec, NULL);
-    if (ffmpeg_err < 0) {
-		vpilog("Failed to open decoder: %i\n", ffmpeg_err);
-        goto free_context;
-	}
+    // The block that created the hardware context and set get_format is removed,
+    // as it is no longer needed with explicit software decoder selection.
 
-	decoding_frame = av_frame_alloc();
+    ffmpeg_err = avcodec_open2(video_codec_ctx, codec, NULL);
+    if (ffmpeg_err < 0) {
+        vpilog("Failed to open decoder: %i (%s)\n", ffmpeg_err, av_err2str(ffmpeg_err));
+        goto free_context;
+    }
+
+    decoding_frame = av_frame_alloc();
     if (!decoding_frame) {
         vpilog("Failed to allocate AVFrame\n");
         goto free_context;
     }
 
-	vpi_present_frame = av_frame_alloc();
-	if (!vpi_present_frame) {
-		vpilog("Failed to allocate AVFrame\n");
-		goto free_decode_frame;
-	}
+    vpi_present_frame = av_frame_alloc();
+    if (!vpi_present_frame) {
+        vpilog("Failed to allocate AVFrame\n");
+        goto free_decode_frame;
+    }
 
-	video_packet = av_packet_alloc();
-	if (!video_packet) {
-		vpilog("Failed to allocate AVPacket\n");
-		goto free_present_frame;
-	}
-
+    video_packet = av_packet_alloc();
+    if (!video_packet) {
+        vpilog("Failed to allocate AVPacket\n");
+        goto free_present_frame;
+    }
 	AVFrame *frame = av_frame_alloc();
 
     pthread_mutex_lock(&vpi_decode_loop_mutex);
