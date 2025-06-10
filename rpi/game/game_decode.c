@@ -354,10 +354,30 @@ void vpi_decode_record_stop()
 	pthread_mutex_unlock(&recording_mutex);
 }
 
+static int handle_decoder_error(int err) {
+    switch (err) {
+        case AVERROR_INVALIDDATA:
+            vpilog("Decoder received invalid data, requesting IDR frame\n");
+            vanilla_request_idr();
+            return 1; // Recoverable error
+            
+        case AVERROR(EAGAIN):
+            // Normal condition, decoder needs more data
+            return 0;
+            
+        case AVERROR_EOF:
+            vpilog("Decoder reached end of stream\n");
+            return -1;
+            
+        default:
+            vpilog("Critical decoder error: %s (%d)\n", av_err2str(err), err);
+            return -1;
+    }
+}
+
 int decode()
 {
 	int err;
-
 	int ret = 1;
 
 	// Retrieve frame from decoder
@@ -367,33 +387,35 @@ int decode()
 			// Decoder wants another packet before it can output a frame. Silently exit.
 			break;
 		} else if (err < 0) {
-			vpilog("Failed to receive frame from decoder: %i\n", err);
-			ret = 0;
+			if (handle_decoder_error(err) <= 0) {
+                ret = 0;
+            }
 			break;
-		} else if (!decoding_frame->data[0]) {
-			vpilog("WE GOT A NULL DATA[0] STRAIGHT FROM THE DECODER?????\n");
-			abort();
-		} else if ((decoding_frame->flags & AV_FRAME_FLAG_CORRUPT) != 0) {
-			vpilog("GOT A CORRUPT FRAME??????\n");
-			abort();
-		} else {
-			pthread_mutex_lock(&vpi_decoding_mutex);
+		} 
+        
+        // Validate the decoded frame
+        if (!decoding_frame->data[0] || (decoding_frame->flags & AV_FRAME_FLAG_CORRUPT)) {
+            vpilog("Received corrupt frame, discarding\n");
+            av_frame_unref(decoding_frame);
+            continue;
+        }
 
-			// Swap refs from decoding_frame to present_frame
-			av_frame_unref(vpi_present_frame);
-			av_frame_move_ref(vpi_present_frame, decoding_frame);
+		pthread_mutex_lock(&vpi_decoding_mutex);
 
-			pthread_mutex_lock(&screenshot_mutex);
-			if (screenshot_buf[0] != 0) {
-				// Dump this frame into file
-				dump_frame_to_file(vpi_present_frame, screenshot_buf);
-				screenshot_buf[0] = 0;
-			}
-			pthread_mutex_unlock(&screenshot_mutex);
-			
-			pthread_cond_broadcast(&decoding_wait_cond);
-			pthread_mutex_unlock(&vpi_decoding_mutex);
+		// Swap refs from decoding_frame to present_frame
+		av_frame_unref(vpi_present_frame);
+		av_frame_move_ref(vpi_present_frame, decoding_frame);
+
+		pthread_mutex_lock(&screenshot_mutex);
+		if (screenshot_buf[0] != 0) {
+			// Dump this frame into file
+			dump_frame_to_file(vpi_present_frame, screenshot_buf);
+			screenshot_buf[0] = 0;
 		}
+		pthread_mutex_unlock(&screenshot_mutex);
+		
+		pthread_cond_broadcast(&decoding_wait_cond);
+		pthread_mutex_unlock(&vpi_decoding_mutex);
 	}
 
 	return ret;
@@ -488,8 +510,17 @@ void *vpi_decode_loop(void *)
         }
 
         // Make sure we have valid data
-        if (vpi_decode_size == 0 || vpi_decode_data == NULL) {
-            vpilog("Invalid decode data received\n");
+        if (vpi_decode_size < 4 || vpi_decode_data == NULL) { // Minimum H.264 NALU size
+            vpilog("Invalid input data (size: %zu)\n", vpi_decode_size);
+            vpi_decode_ready = 0;
+            continue;
+        }
+
+        // Check for valid NALU start code (0x00000001 or 0x000001)
+        if (!(vpi_decode_data[0] == 0 && vpi_decode_data[1] == 0 && 
+              (vpi_decode_data[2] == 1 || (vpi_decode_data[2] == 0 && vpi_decode_data[3] == 1)))) {
+            vpilog("Invalid NALU start code, requesting IDR\n");
+            vanilla_request_idr();
             vpi_decode_ready = 0;
             continue;
         }
@@ -523,8 +554,12 @@ void *vpi_decode_loop(void *)
         pthread_mutex_unlock(&vpi_decode_loop_mutex);
 
         if (err < 0) {
-            vpilog("Decoder error (%s), requesting IDR frame\n", av_err2str(err));
-            vanilla_request_idr();
+            if (!handle_decoder_error(err)) {
+                // Non-recoverable error
+                vpi_decode_loop_running = 0;
+                ret = VANILLA_PI_ERR_DECODER;
+                break;
+            }
         } else {
             // Try to decode frame
             if (!decode()) {
