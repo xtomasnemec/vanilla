@@ -45,7 +45,7 @@ enum AVPixelFormat get_format(AVCodecContext* ctx, const enum AVPixelFormat *pix
     while (*pix_fmt != AV_PIX_FMT_NONE) {
         if (*pix_fmt == AV_PIX_FMT_DRM_PRIME) {
             return AV_PIX_FMT_DRM_PRIME;
-		}
+        	}
         pix_fmt++;
     }
 
@@ -412,15 +412,14 @@ void *vpi_decode_loop(void *)
     int ret = VANILLA_PI_ERR_DECODER;
     int ffmpeg_err;
 
-    // block nvidia hardware decoder
-    const AVCodec *codec = avcodec_find_decoder(AV_CODEC_ID_H264);
-    if (codec && strcmp(codec->name, "h264_nvv4l2") == 0) {
-        vpilog("Hardware H264 decoder (%s) is not allowed, using software decoder only.\n", codec->name);
-        codec = NULL;
-    }
+    // Try hardware decoder first, then fall back to software
+    const AVCodec *codec = avcodec_find_decoder_by_name("h264_nvv4l2");
     if (!codec) {
-        vpilog("No suitable software H264 decoder was available\n");
-        goto exit;
+        codec = avcodec_find_decoder(AV_CODEC_ID_H264);
+        if (!codec) {
+            vpilog("No H264 decoder was available\n");
+            goto exit;
+        }
     }
 
     video_codec_ctx = avcodec_alloc_context3(codec);
@@ -429,11 +428,21 @@ void *vpi_decode_loop(void *)
         goto free_context;
     }
 
+    // Set hardware decoder options if using nvv4l2
+    if (strcmp(codec->name, "h264_nvv4l2") == 0) {
+        video_codec_ctx->get_format = get_format;
+        av_opt_set_int(video_codec_ctx, "num_capture_buffers", 4, 0);
+        av_opt_set_int(video_codec_ctx, "output_format", AV_PIX_FMT_DRM_PRIME, 0);
+        av_opt_set_int(video_codec_ctx, "display_delay", 0, 0);
+    }
+
     ffmpeg_err = avcodec_open2(video_codec_ctx, codec, NULL);
     if (ffmpeg_err < 0) {
-        vpilog("Failed to open decoder: %i\n", ffmpeg_err);
+        vpilog("Failed to open decoder %s: %i\n", codec->name, ffmpeg_err);
         goto free_context;
     }
+
+    vpilog("Using decoder: %s\n", codec->name);
 
     decoding_frame = av_frame_alloc();
     if (!decoding_frame) {
@@ -452,8 +461,6 @@ void *vpi_decode_loop(void *)
         vpilog("Failed to allocate AVPacket\n");
         goto free_present_frame;
     }
-
-    AVFrame *frame = av_frame_alloc();
 
     pthread_mutex_lock(&vpi_decode_loop_mutex);
     while (vpi_decode_loop_running) {
@@ -504,8 +511,6 @@ void *vpi_decode_loop(void *)
     pthread_mutex_unlock(&vpi_decode_loop_mutex);
 
     ret = VANILLA_SUCCESS;
-
-    av_frame_free(&frame);
 
 free_packet:
     av_packet_free(&video_packet);

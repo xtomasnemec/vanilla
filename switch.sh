@@ -7,7 +7,6 @@ cmake ..
 cmake --build . --parallel
 sudo cmake --install .
 cd
-cd vanilla
 mkdir -p patches && cd patches
 wget -q https://github.com/vanilla-wiiu/nexmon/releases/download/nx/brcmfmac.ko
 wget -q https://github.com/vanilla-wiiu/nexmon/releases/download/nx/brcmfmac4356-pcie.bin
@@ -20,6 +19,5 @@ sudo rmmod brcmfmac || true
 sudo cp brcmfmac.ko /lib/modules/$(uname -r)/kernel/drivers/net/wireless/broadcom/brcm80211/brcmfmac/
 sudo modprobe brcmfmac
 cd
-cd vanilla
 rm -rf patches
 echo "Success"

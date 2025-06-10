@@ -92,7 +92,7 @@ sudo cmake --install .
   curl -fsSL https://raw.githubusercontent.com/xtomasnemec/vanilla/refs/heads/master/deckwifi.sh | sudo bash
   ```
 ## Running the program
-- Run usin
+- Run using
 ```sh
   cd vanilla
   ./run.sh
