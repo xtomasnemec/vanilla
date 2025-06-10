@@ -112,6 +112,5 @@ sudo cp brcmfmac.ko /lib/modules/$(uname -r)/kernel/drivers/net/wireless/broadco
 sudo depmod -a
 sudo rmmod brcmfmac || true
 sudo modprobe brcmfmac
-echo "Krok 7: Úklid po patchích..."
 cd ~
 rm -rf patches

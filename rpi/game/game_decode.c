@@ -418,7 +418,7 @@ void *vpi_decode_loop(void *)
 
     // Iterate through all H.264 decoders and pick the first software one
     while ((codec = av_codec_iterate(&i))) {
-        if (avcodec_is_decoder(codec) && codec->id == AV_CODEC_ID_H264) {
+        if (av_codec_is_decoder(codec) && codec->id == AV_CODEC_ID_H264) {
             // Check if it's NOT a hardware accelerated decoder
             if (!(codec->capabilities & AV_CODEC_CAP_HARDWARE)) {
                 vpilog("Selected software H.264 decoder: %s (%s)\n", codec->name, codec->long_name);
@@ -508,7 +508,7 @@ void *vpi_decode_loop(void *)
 		pthread_mutex_unlock(&vpi_decode_loop_mutex);
 
         if (err < 0) {
-            vpilog("Failed to send packet to decoder: %s (%i)\n", av_err2str(err), err);
+            vpilog("Decoder error (FFmpeg code: %d), requesting IDR frame\n", err);
             // return 0;
 
 			vanilla_request_idr();
